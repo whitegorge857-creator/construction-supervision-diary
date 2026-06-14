@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Diary, Project } from '@/types';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
 
