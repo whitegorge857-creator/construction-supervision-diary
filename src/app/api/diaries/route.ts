@@ -33,7 +33,8 @@ export async function POST(request: Request) {
     body.weathercode ?? null, body.temperature_2m_max ?? null, body.temperature_2m_min ?? null,
     body.precipitation_sum ?? null, body.isAutoWeather ? 1 : 0, body.author || '',
     JSON.stringify(body.modules || []), body.aiGeneratedContent || '', body.finalContent || '');
-  const row = db.prepare('SELECT * FROM diaries WHERE id = ?').get(result.lastInsertRowid);
+  const row = db.prepare('SELECT * FROM diaries WHERE id = ?').get(result.lastInsertRowid) as any;
+  if (!row) return NextResponse.json({ error: '创建失败' }, { status: 500 });
   return NextResponse.json({ ...row, modules: JSON.parse(row.modules || '[]'), isAutoWeather: row.isAutoWeather === 1 }, { status: 201 });
 }
 
@@ -60,7 +61,8 @@ export async function PUT(request: NextRequest) {
   vals.push(id);
   const r = db.prepare('UPDATE diaries SET ' + fields.join(', ') + ' WHERE id = ?').run(...vals);
   if (r.changes === 0) return NextResponse.json({ error: '日记不存在' }, { status: 404 });
-  const row = db.prepare('SELECT * FROM diaries WHERE id = ?').get(id);
+  const row = db.prepare('SELECT * FROM diaries WHERE id = ?').get(id) as any;
+  if (!row) return NextResponse.json({ error: '日记不存在' }, { status: 404 });
   return NextResponse.json({ ...row, modules: JSON.parse(row.modules || '[]'), isAutoWeather: row.isAutoWeather === 1 });
 }
 
