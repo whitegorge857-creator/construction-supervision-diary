@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, dbAll, dbGet, dbRun } from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get('projectId');
   const date = searchParams.get('date');
-
-  await getDb();
+  const db = getDb();
   let sql = 'SELECT * FROM diaries';
-  const params: any[] = [];
+  const paramsArr: any[] = [];
   const conditions: string[] = [];
 
-  if (projectId) { conditions.push('projectId = ?'); params.push(parseInt(projectId)); }
-  if (date) { conditions.push('date = ?'); params.push(date); }
+  if (projectId) { conditions.push('projectId = ?'); paramsArr.push(parseInt(projectId)); }
+  if (date) { conditions.push('date = ?'); paramsArr.push(date); }
   if (conditions.length > 0) sql += ' WHERE ' + conditions.join(' AND ');
   sql += ' ORDER BY id DESC';
 
-  const rows = dbAll(sql, params);
+  const stmt = db.prepare(sql);
+  const rows = paramsArr.length > 0 ? stmt.all(...paramsArr) : stmt.all();
   const diaries = rows.map((row: any) => ({
     ...row,
     modules: typeof row.modules === 'string' ? JSON.parse(row.modules) : (row.modules || []),
@@ -27,15 +27,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   const body = await request.json();
-  await getDb();
-  const result = dbRun(`INSERT INTO diaries (projectId, date, weather, weathercode, temperature_2m_max, temperature_2m_min, precipitation_sum, isAutoWeather, author, modules, aiGeneratedContent, finalContent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-    body.projectId, body.date, body.weather || '',
+  const db = getDb();
+  const stmt = db.prepare(`INSERT INTO diaries (projectId, date, weather, weathercode, temperature_2m_max, temperature_2m_min, precipitation_sum, isAutoWeather, author, modules, aiGeneratedContent, finalContent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const result = stmt.run(body.projectId, body.date, body.weather || '',
     body.weathercode ?? null, body.temperature_2m_max ?? null, body.temperature_2m_min ?? null,
     body.precipitation_sum ?? null, body.isAutoWeather ? 1 : 0, body.author || '',
-    JSON.stringify(body.modules || []), body.aiGeneratedContent || '', body.finalContent || ''
-  ]);
-  const row = dbGet('SELECT * FROM diaries WHERE id = ?', [result.lastInsertRowid]);
-  if (!row) return NextResponse.json({ error: '创建失败' }, { status: 500 });
+    JSON.stringify(body.modules || []), body.aiGeneratedContent || '', body.finalContent || '');
+  const row = db.prepare('SELECT * FROM diaries WHERE id = ?').get(result.lastInsertRowid);
   return NextResponse.json({ ...row, modules: JSON.parse(row.modules || '[]'), isAutoWeather: row.isAutoWeather === 1 }, { status: 201 });
 }
 
@@ -43,7 +41,7 @@ export async function PUT(request: NextRequest) {
   const body = await request.json();
   const { id, ...updates } = body;
   if (!id) return NextResponse.json({ error: '缺少日记ID' }, { status: 400 });
-  await getDb();
+  const db = getDb();
   const fields: string[] = [];
   const vals: any[] = [];
   if (updates.projectId !== undefined) { fields.push('projectId = ?'); vals.push(updates.projectId); }
@@ -60,17 +58,15 @@ export async function PUT(request: NextRequest) {
   if (updates.finalContent !== undefined) { fields.push('finalContent = ?'); vals.push(updates.finalContent); }
   if (fields.length === 0) return NextResponse.json({ error: '无更新字段' }, { status: 400 });
   vals.push(id);
-  const r = dbRun('UPDATE diaries SET ' + fields.join(', ') + ' WHERE id = ?', vals);
+  const r = db.prepare('UPDATE diaries SET ' + fields.join(', ') + ' WHERE id = ?').run(...vals);
   if (r.changes === 0) return NextResponse.json({ error: '日记不存在' }, { status: 404 });
-  const row = dbGet('SELECT * FROM diaries WHERE id = ?', [id]);
-  if (!row) return NextResponse.json({ error: '日记不存在' }, { status: 404 });
+  const row = db.prepare('SELECT * FROM diaries WHERE id = ?').get(id);
   return NextResponse.json({ ...row, modules: JSON.parse(row.modules || '[]'), isAutoWeather: row.isAutoWeather === 1 });
 }
 
 export async function DELETE(request: NextRequest) {
   const id = parseInt(new URL(request.url).searchParams.get('id') || '');
   if (!id) return NextResponse.json({ error: '缺少日记ID' }, { status: 400 });
-  await getDb();
-  dbRun('DELETE FROM diaries WHERE id = ?', [id]);
+  getDb().prepare('DELETE FROM diaries WHERE id = ?').run(id);
   return NextResponse.json({ success: true });
 }

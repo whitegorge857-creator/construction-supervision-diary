@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['sql.js'],
+  serverExternalPackages: ['better-sqlite3'],
 }
 
 module.exports = nextConfig
